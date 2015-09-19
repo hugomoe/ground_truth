@@ -1,5 +1,52 @@
-//# ground_truth
-//Vérité terrain incorrect pour l'instant
+//clang -I/usr/X11/include -I/usr/local/include/libiomp viho.c iio.c ftr.c -L/usr/X11/lib -lX11
+//gcc-5 -I/usr/X11/include -fopenmp viho.c iio.c ftr.c -I/usr/local/include/libiomp -L/usr/X11/lib -lfftw3 -lX11
+
+// Homography viewer.
+//
+// This program loads a color image and allows the user to drag the four
+// corners of the image around the window, thus deforming the image by an
+// homography.
+//
+//
+// Usage:
+//
+// 	viho image.png
+//
+//
+// Mouse controls:
+//
+// 	1. Drag the control points with the left mouse button to change their
+// 	position in the window
+//
+//	2. Drag the control points with the right mouse button to change their
+//	position in the image
+//
+//	3. Mouse wheel for zoom-in and zoom-out
+//
+//
+// Keys:
+//
+//	q	exit the viewer
+//	c	reset viewer and center image
+//
+// 	+	zoom-in
+// 	-	zoom-out
+// 	ARROWS	move the view
+//
+// 	0	use nearest-neighbor interpolation
+// 	1	use linear interpolation
+// 	2	use bilinear interpolation
+// 	3	use bicubic interpolation
+//
+// 	p	toggle periodic extrapolation
+// 	w	toggle horizon
+// 	.	toggle grid points
+//
+//
+// Compilation:
+//
+//	c99 -O3 -DNDEBUG viho.c iio.c ftr.c -lX11 -lpng -ljpeg -ltiff -o viho 
+//
 
 
 // SECTION 1. Libraries and data structures                                 {{{1
@@ -8,13 +55,12 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <omp.h>
 
 // user interface library
 #include "ftr.h"
-
-
-// library for image input-output
-#include "iio.h"
+#include "ftr.c"
+#include "iio.c"
 
 
 // radius of the disks that are displayed around control points
@@ -301,9 +347,9 @@ static float getsample_cons(float *x, int w, int h, int pd, int i, int j, int l)
 {
 	static float value = 0;
 	if (w == 0 && h == 0)
-		value = 0;
+		value = *x;
 	if (i < 0 || i >= w || j < 0 || j >= h)
-		return value;
+		return 0;
 	if (l >= pd)
 		l = pd - 1;
 	return x[(i+j*w)*pd + l];
@@ -369,7 +415,7 @@ static float linear_interpolation_at(float *x, int w, int h, int pd,
 	float c = pix(x, w, h, pd, ip  , iq+1, l);
 	float d = pix(x, w, h, pd, ip+1, iq+1, l);
 	return 0;
-//	return marchi(a, c, b, d, p-ip, q-iq);
+	//return marchi(a, c, b, d, p-ip, q-iq);
 }
 
 // instance of "interpolator_t" for nearest neighbor interpolation
@@ -421,17 +467,18 @@ static float bicubic_interpolation_at(float *img, int w, int h, int pd,
 static interpolator_t obtain_interpolator(struct viewer_state *e)
 {
 	if (e->dragging_point || e->dragging_ipoint) return nearest_neighbor_at;
-//	if (e->interpolation_order == 1) return linear_interpolation_at;
+	if (e->interpolation_order == 1) return linear_interpolation_at;
 	if (e->interpolation_order == 2) return bilinear_interpolation_at;
 	if (e->interpolation_order == 3) return bicubic_interpolation_at;
 	return nearest_neighbor_at;
 }
 
 
-#define ZOOM 40
-#include <stdlib.h>
 
 // SECTION 6. Main Warping Function                                         {{{1
+
+#include <time.h>
+#include "ground_truth.h"
 
 // draw the image warped by the current homography
 static void draw_warped_image(struct FTR *f)
@@ -443,133 +490,69 @@ static void draw_warped_image(struct FTR *f)
 
 	double         H[3][3];   obtain_current_homography(H, e);
 	
+/*	H[0][0]=0.107933;
+H[0][1]=0.000899;
+H[0][2]=-3.784855;
+H[1][0]=-0.747116;
+H[1][1]=0.778536;
+H[1][2]=19.920756;
+H[2][0]=-0.000941;
+H[2][1]=-0.000131;
+H[2][2]=1.;*/
+	
+
+	float *img = malloc(3*(f->w)*(f->h)*sizeof(float));
+	float *img_f = malloc(3*(f->w)*(f->h)*sizeof(float));
+	for(int i=0;i<(f->w)*(f->h)*3;i++){img_f[i]=0;}
+
 	extrapolator_t OUT      = obtain_extrapolator(e);
 	interpolator_t EVAL     = obtain_interpolator(e);
 
-//methode naive
-if(e->interpolation_order==0){
-	for (int j = 0; j < f->h; j++)
-	for (int i = 0; i < f->w; i++)
-	{
-		double p[2] = {i, j};
-		apply_homography(p, H, p);
-		p[0] = (p[0] - 0.5) * w / (w - 1.0);
-		p[1] = (p[1] - 0.5) * h / (h - 1.0);
-		for (int l = 0; l < 3; l++)
-		{
-			int idx = l + 3 * (f->w * j + i);
-			float v = EVAL(e->img, w, h, e->pd, p[0], p[1], l, OUT);
-			f->rgb[idx] = float_to_byte(v);
+if(e->interpolation_order == 0){
+	for (int j = 0; j < f->h; j++){
+	for (int i = 0; i < f->w; i++){
+			double p[2] = {i, j};
+			apply_homography(p, H, p);
+			p[0] = (p[0] - 0.5) * w / (w - 1.0);
+			p[1] = (p[1] - 0.5) * h / (h - 1.0);
+			for (int l = 0; l < 3; l++){
+				int idx = l + 3 * (f->w * j + i);
+				float v = EVAL(e->img, w, h, e->pd, p[0], p[1], l, OUT);
+				f->rgb[idx] = v;
+			}
 		}
 	}
 	}
-
+	
 if(e->interpolation_order==1){
-
-		double fzoom=ZOOM;
-		double HH[3][3];
-		HH[0][0]=H[0][0];
-		HH[0][1]=H[0][1];
-		HH[0][2]=H[0][2]*fzoom;
-		HH[1][0]=H[1][0];
-		HH[1][1]=H[1][1];
-		HH[1][2]=H[1][2]*fzoom;
-		HH[2][0]=H[2][0]/fzoom;
-		HH[2][1]=H[2][1]/fzoom;
-		HH[2][2]=H[2][2];
-
-
-	float *img = malloc(w*h*3*sizeof(float));
-	if(e->pd==1){
-		for(int l=0;l<3;l++){
-			for(int i=0;i<w*h;i++){
-				img[3*i+l]=e->img[i];
-			}
-		}
-		e->img = img;
+	clock_t debutcpu,fincpu;
+	double debutreal,finreal;
+	debutcpu = clock();
+	debutreal = omp_get_wtime();
+	if(e->pd==3){
+        apply_homo_ground_truth(e->img,img_f,w,h,f->w,f->h,H);
+	}else{//suppose pd=1
+        float *img3 = malloc(3*w*h*sizeof(float));
+        for(int i=0;i<w*h;i++){
+            for(int l = 0;l<3;l++){
+                img3[3*i+l]=e->img[i];
+            }
+        }
+        apply_homo_ground_truth(img3,img_f,w,h,f->w,f->h,H);
 	}
-	
-	float *img_aux = malloc(3*sizeof(float)*w*h*ZOOM*ZOOM);
-	float *img_aux2 = malloc(3*sizeof(float)*f->w*f->h*ZOOM*ZOOM);
-	float *img_f = malloc(3*sizeof(float)*f->w*f->h);
-	
-	for(int l=0;l<3;l++){
-	for(int i=0;i<w;i++){
-		for(int j=0;j<h;j++){
-			for(int u=0;u<ZOOM;u++){
-				for(int v=0;v<ZOOM;v++){
-					float x=u/fzoom;
-					float y=v/fzoom;
-					int id,jd;
-					if(i==w-1){id=0;}else{id=i+1;}
-					if(j==h-1){jd=0;}else{jd=j+1;}
-					img_aux[3*(i*ZOOM+u+(j*ZOOM+v)*w*ZOOM)+l]=(1-x)*(1-y)*(e->img[(i+j*w)*3+l])+(1-x)*y*(e->img[(i+jd*w)*3+l])
-					+x*(1-y)*(e->img[(id+j*w)*3+l])+x*y*(e->img[(id+jd*w)*3+l]);
-				}
-			}
-		}
+	for(int i=0;i<3*(f->w)*(f->h);i++){(f->rgb)[i]=float_to_byte(img_f[i]);}
+	fincpu = clock();
+	finreal = omp_get_wtime();
+	printf("cputime :%fs\ntime : %fs\n",(double)(fincpu-debutcpu)/CLOCKS_PER_SEC,(double)(finreal-debutreal));
 	}
-	}
-	
-	for(int l=0;l<3;l++)
-	for (int j = 0; j < ZOOM*f->h; j++)
-	for (int i = 0; i < ZOOM*f->w; i++)
-	{
-		double p[2] ={i,j};
-		
-		apply_homography(p, HH, p);
-		p[0] = (p[0] - 0.5) * ZOOM * w / (ZOOM * w - 1.0);
-		p[1] = (p[1] - 0.5) * ZOOM * h / (ZOOM * h - 1.0);
-			int idx = 3*(ZOOM * f->w * j + i)+l;
-			img_aux2[idx] = EVAL(img_aux, ZOOM*w, ZOOM*h, 3, p[0], p[1], l, OUT);
-	}
-	
-	int W = ZOOM*f->w;  int H = ZOOM*f->h;
-	
-	int taps = 2*ZOOM;
-	double sigma = 0.8 * ZOOM;
-	double *gauss = malloc(pow((2*taps+1),2)*sizeof(float));
-	double tot = 0;
-	for(int i=-taps;i<=taps;i++){
-		for(int j=-taps;i<=taps;i++){
-			tot += (gauss[i+taps+(j+taps)*(2*taps+1)] = exp(-(pow(i,2)+pow(j,2))/(2*pow(sigma,2))));
-		}
-	}	
-	for(int u=0;u<pow(2*taps+1,2);u++){gauss[u]=gauss[u]/tot;}
-	
-	//printf("%f\n",gauss[taps + taps*(2*taps+1)]);
-	//iio_save_image_float("test5.pgm", img_aux2,W,H);
-	
-	for(int l=0;l<3;l++){
-		for (int j = 0; j < f->h; j++){
-			for (int i = 0; i < f->w; i++){
-				float v=0;
-				for(int i2=-taps;i2<=taps;i2++){
-					for(int j2=-taps;j2<=taps;j2++){
-						int i1 = good_modulus(i*ZOOM+i2,(f->w)*ZOOM);
-						int j1 = good_modulus(j*ZOOM+j2,(f->h)*ZOOM);
-						v += gauss[i2+taps+(j2+taps)*(2*taps+1)]*img_aux2[(i1+j1*ZOOM*f->w)*3+l];
-						int idx = l + 3 * (f->w * j + i);
-						f->rgb[idx] = float_to_byte(v);
-						img_f[idx] = v;
-					}
-				}
-			}
-		}
-	}
-	
-	free(img_aux);free(img_aux2);
-	
-	iio_save_image_float_vec("img_ground_truth.pgm",img_f,f->w,f->h,3);
-	
-}
-	
-	
 
 }
 
 
-
+
+
+
+
 // SECTION 7. Drawing                                                       {{{1
 
 // Subsection 7.1. Drawing segments                                         {{{2
@@ -931,93 +914,11 @@ static void event_motion(struct FTR *f, int b, int m, int x, int y)
 }
 
 
-
-#include <stdlib.h>
-#define TAPS 5     //nombre de coefficients non nuls du filtre gaussien (doit être impaire)
-#define SIG 0.6 
-
-int coord(int i,int j,int u,int v,int w,int l){
-	int x = good_modulus(u,w/pow(2,i));
-	int y = good_modulus(v,w/pow(2,j));
-	return (2*(1-1/pow(2,i))*w + 4*(1-1/pow(2,j))*w*w + x + y*2*w)*3+l;
-}
-
-//deux fonctions de flitrage verticale et horizontale
-
-float gaussian_filter_h(float *r,int i,int j,int u,int v,int w,int l,float *g){
-	float a,b;
-	a = b = 0;
-	for(int f=0;f<TAPS;f++){a += r[coord(i-1,j,2*u+f-(TAPS-1)/2,v,w,l)]*g[f];}
-	for(int f=0;f<TAPS;f++){b += r[coord(i-1,j,2*u+1+f-(TAPS-1)/2,v,w,l)]*g[f];}
-	return (a+b)/2;
-}
-
-float gaussian_filter_v(float *r,int i,int j,int u,int v,int w,int l,float *g){
-	float a,b;
-	a = b = 0;
-	for(int f=0;f<TAPS;f++){a += r[coord(i,j-1,u,2*v+f-(TAPS-1)/2,w,l)]*g[f];}
-	for(int f=0;f<TAPS;f++){b += r[coord(i,j-1,u,2*v+1+f-(TAPS-1)/2,w,l)]*g[f];}
-	return (a+b)/2;
-}
-
-
-float *build_ripmap(float *img,float *r,int w,int h,int pd,int logw){
-	int l,ll,i,j,u,v,w1,w2;
-	
-	//on déclare un filtre gaussien 1D;
-	float gauss1D[TAPS];
-	for(int f=0;f<TAPS;f++){
-		gauss1D[f]=exp(-pow((TAPS-1)/2-f,2)/(2*pow(SIG,2)))/(sqrt(2*M_PI)*SIG);
-	}
-	float total = 0;
-	for(int f=0;f<TAPS;f++){total = total + gauss1D[f];}
-	for(int f=0;f<TAPS;f++){gauss1D[f] = gauss1D[f]/total;}
-	
-	for(u=0;u<w;u++){
-		for(v=0;v<h;v++){
-			for(l=0;l<3;l++){
-				if(l>pd-1){ll=pd-1;}else{ll=l;}
-				r[coord(0,0,u,v,w,l)]=img[(u+v*w)*pd+ll];
-			}
-		}
-	}
-//on construit l'image d'origine en (0,0)	
-
-	for(i=1;pow(2,i)<=w;i++){
-		w1=w/pow(2,i);
-		for(u=0;u<w1;u++){
-			for(v=0;v<w;v++){
-				for(l=0;l<3;l++){    
-					r[coord(i,0,u,v,w,l)] = gaussian_filter_h(r,i,0,u,v,w,l,gauss1D);
-				}
-			}
-		}
-	}
-//ici on moyenne simplement pour avoir tous les rectangles aplatis en largeur	
-
-	for(i=0;pow(2,i)<=w;i++){
-		w1=w/pow(2,i);
-		for(j=1;pow(2,j)<=w;j++){
-			w2=w/pow(2,j);
-			for(u=0;u<w1;u++){
-				for(v=0;v<w2;v++){
-					for(l=0;l<3;l++){
-						r[coord(i,j,u,v,w,l)] = gaussian_filter_v(r,i,j,u,v,w,l,gauss1D);
-					}
-				}
-			}
-		}
-	}
-//ici on obtient les rectangles aplatis en hauteur a partir de ceux calculés avant 
-	return r;
-}
-
-
-
-
 
 // SECTION 9. Main Program                                                  {{{1
 
+// library for image input-output
+#include "iio.h"
 
 // main function
 int main(int argc, char *argv[])
@@ -1033,6 +934,7 @@ int main(int argc, char *argv[])
 	f.userdata = e;
 
 	e->img = iio_read_image_float_vec(filename_in, &e->iw, &e->ih, &e->pd);
+
 
 	center_view(&f);
 	paint_state(&f);

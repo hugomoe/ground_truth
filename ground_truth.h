@@ -20,11 +20,11 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 	
 	float *img_aux = malloc(3*sizeof(float)*w*h*ZOOM*ZOOM);
 	float *img_aux2 = malloc(3*sizeof(float)*w_f*h_f*ZOOM*ZOOM);
+	for(int i=0;i<w*h*ZOOM*ZOOM*3;i++){img_aux[i]=0;}
 	
 	
 	
-	
-	for(int l=0;l<3;l++){
+	/*for(int l=0;l<3;l++){
 	for(int i=0;i<w;i++){
 		for(int j=0;j<h;j++){
 			for(int u=0;u<ZOOM;u++){
@@ -40,11 +40,11 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 			}
 		}
 	}
-	}
+	}*/
 	
 	int w_zoom = ZOOM*w; int h_zoom = ZOOM*h;
 	
-	//zoom(img,w,h,3,w_zoom,h_zoom,img_aux);
+	zoom(img,w,h,3,w_zoom,h_zoom,img_aux);
 	
 	
 	

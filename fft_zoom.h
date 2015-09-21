@@ -1,4 +1,3 @@
-/* Passer images en puissances de 2 */ 
 // On fait un zoom in par zero padding.
 
 
@@ -17,18 +16,22 @@
  /* soit w la longueur et h la largeur de l'image de départ */
  // kw et kh seront respectivement la longueur et la largeur de l'image finale.
 
-for(int l=0;l<pd;l++){ 
 
 	float *refftimg= malloc(w*h*sizeof(float));
 	float *imfftimg= malloc(w*h*sizeof(float));
 	float *img_aux= malloc(w*h*sizeof(float));
-	for(int i=0;i<w*h;i++){
-   		img_aux[i]=img[pd*i+l]; 
-	}
-   
-	fourierForward(img_aux,refftimg,imfftimg,w,h) ; // transformé de Fourier directe
 	float *refftimg2=malloc(kw*kh*sizeof(float));
 	float *imfftimg2=malloc(kw*kh*sizeof(float));
+	float *img_final_aux=malloc(sizeof(float)*kw*kh);
+	
+for(int l=0;l<pd;l++){ 
+
+	//met a zero
+	for(int i=0;i<w*h;i++){img_aux[i]=img[pd*i+l];imfftimg[i]=0;refftimg[i]=0;}
+	for(int i=0;i<kw*kh;i++){refftimg2[i]=0;imfftimg2[i]=0;img_final_aux[i]=0;}
+   
+	fourierForward(img_aux,refftimg,imfftimg,w,h) ; // transformé de Fourier directe
+
     // début zéro-padding
 	for (int i=0;i<kw;i++){
 		for (int j=0;j<kh;j++){  
@@ -44,7 +47,6 @@ for(int l=0;l<pd;l++){
     	}
     }
     // fin zéro-padding
-	float *img_final_aux=malloc(sizeof(float)*kw*kh);
 	fourierBackward(refftimg2, imfftimg2, img_final_aux, kw,kh); // transformée de Fourier inverse
 	
 
@@ -53,14 +55,16 @@ for(int l=0;l<pd;l++){
 			img_final[(i+j*kw)*pd+l]= (kw/(float)w)*(kh/(float)h)*img_final_aux[i+j*kw];
 		}
 	}
-	
+
+}
+
 	free(refftimg2);
 	free(imfftimg2);
 	free(refftimg);
 	free(imfftimg);
 	free(img_aux);
 	free(img_final_aux);
-}
+	
 return 0 ;
 }
 

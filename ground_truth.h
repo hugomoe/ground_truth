@@ -1,4 +1,4 @@
-#define ZOOM 10
+#define ZOOM 5
 #include "fft_zoom.h"
 
 
@@ -15,8 +15,7 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 		HH[2][0]=H[2][0]/fzoom;
 		HH[2][1]=H[2][1]/fzoom;
 		HH[2][2]=H[2][2];
-
-
+	
 	
 	float *img_aux = malloc(3*sizeof(float)*w*h*ZOOM*ZOOM);
 	float *img_aux2 = malloc(3*sizeof(float)*w_f*h_f*ZOOM*ZOOM);
@@ -24,7 +23,7 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 	
 	
 	//Zoom bilineaire
-	/*for(int l=0;l<3;l++){
+	for(int l=0;l<3;l++){
 	for(int i=0;i<w;i++){
 		for(int j=0;j<h;j++){
 			for(int u=0;u<ZOOM;u++){
@@ -40,10 +39,11 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 			}
 		}
 	}
-	}*/
+	}
 	
-	int w_zoom = ZOOM*w; int h_zoom = ZOOM*h;
-	zoom(img,w,h,3,w_zoom,h_zoom,img_aux);
+	//zoom zero-padding
+	//int w_zoom = ZOOM*w; int h_zoom = ZOOM*h;
+	//zoom(img,w,h,3,w_zoom,h_zoom,img_aux);
 	
 	
 	
@@ -59,10 +59,10 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 		double p[2] ={i,j};
 		
 		apply_homography(p, HH, p);
-		p[0] = (p[0] - 0.5) * ZOOM * w / (ZOOM * w - 1.0);
-		p[1] = (p[1] - 0.5) * ZOOM * h / (ZOOM * h - 1.0);
+		//p[0] = (p[0] - 0.5) * ZOOM * w / (ZOOM * w - 1.0);
+		//p[1] = (p[1] - 0.5) * ZOOM * h / (ZOOM * h - 1.0);
 			int idx = 3*(ZOOM * w_f * j + i)+l;
-			img_aux2[idx] = EVAL(img_aux, ZOOM*w, ZOOM*h, 3, p[0], p[1], l, OUT);
+			img_aux2[idx] = EVAL(img_aux, ZOOM*w, ZOOM*h, 3, p[0], p[1]+2*ZOOM, l, OUT);//POURQUOI ?
 	}
 	
 	int taps = 2*ZOOM;
@@ -94,9 +94,6 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 		}
 	}
 	
-	free(gauss);
-	free(img_aux);
-	free(img_aux2);
 	
 	return 0;
 }

@@ -1,5 +1,7 @@
 //clang -I/usr/X11/include -I/usr/local/include/libiomp viho.c iio.c ftr.c -L/usr/X11/lib -lX11
 //gcc-5 -I/usr/X11/include -fopenmp viho.c iio.c ftr.c -I/usr/local/include/libiomp -L/usr/X11/lib -lfftw3 -lX11
+//gcc-5 viho.c -I/usr/local/include/libiomp -I/usr/X11/include -L/usr/local/Cellar/jpeg/8d -L/usr/X11/lib -lfftw3 -lX11 -L/usr/local/Cellar/libtiff/4.0.3 -ltiff -ljpeg -lpng -O3 -fopenmp
+
 
 // Homography viewer.
 //
@@ -55,7 +57,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <omp.h>
+//#include <omp.h>
 
 // user interface library
 #include "ftr.h"
@@ -500,11 +502,7 @@ H[2][0]=-0.000941;
 H[2][1]=-0.000131;
 H[2][2]=1.;*/
 	
-
-	float *img = malloc(3*(f->w)*(f->h)*sizeof(float));
-	float *img_f = malloc(3*(f->w)*(f->h)*sizeof(float));
-	for(int i=0;i<(f->w)*(f->h)*3;i++){img_f[i]=0;}
-
+	
 	extrapolator_t OUT      = obtain_extrapolator(e);
 	interpolator_t EVAL     = obtain_interpolator(e);
 
@@ -525,10 +523,11 @@ if(e->interpolation_order == 0){
 	}
 	
 if(e->interpolation_order==1){
+	float *img_f = malloc(3*(f->w)*(f->h)*sizeof(float));
+	for(int i=0;i<(f->w)*(f->h)*3;i++){img_f[i]=0;}
 	clock_t debutcpu,fincpu;
-	double debutreal,finreal;
 	debutcpu = clock();
-	debutreal = omp_get_wtime();
+
 	if(e->pd==3){
         apply_homo_ground_truth(e->img,img_f,w,h,f->w,f->h,H);
 	}else{//suppose pd=1
@@ -541,9 +540,10 @@ if(e->interpolation_order==1){
         apply_homo_ground_truth(img3,img_f,w,h,f->w,f->h,H);
 	}
 	for(int i=0;i<3*(f->w)*(f->h);i++){(f->rgb)[i]=float_to_byte(img_f[i]);}
+	
 	fincpu = clock();
-	finreal = omp_get_wtime();
-	printf("cputime :%fs\ntime : %fs\n",(double)(fincpu-debutcpu)/CLOCKS_PER_SEC,(double)(finreal-debutreal));
+	printf("cputime :%fs\n",(double)(fincpu-debutcpu)/CLOCKS_PER_SEC);
+
 	}
 
 }

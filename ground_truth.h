@@ -4,17 +4,17 @@
 
 int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,double H[3][3]){	
 	
-		double fzoom=ZOOM;
-		double HH[3][3];
-		HH[0][0]=H[0][0];
-		HH[0][1]=H[0][1];
-		HH[0][2]=H[0][2]*fzoom;
-		HH[1][0]=H[1][0];
-		HH[1][1]=H[1][1];
-		HH[1][2]=H[1][2]*fzoom;
-		HH[2][0]=H[2][0]/fzoom;
-		HH[2][1]=H[2][1]/fzoom;
-		HH[2][2]=H[2][2];
+	double fzoom=ZOOM;
+	double HH[3][3];
+	HH[0][0]=H[0][0];
+	HH[0][1]=H[0][1];
+	HH[0][2]=H[0][2]*fzoom;
+	HH[1][0]=H[1][0];
+	HH[1][1]=H[1][1];
+	HH[1][2]=H[1][2]*fzoom;
+	HH[2][0]=H[2][0]/fzoom;
+	HH[2][1]=H[2][1]/fzoom;
+	HH[2][2]=H[2][2];
 	
 	
 	float *img_aux = malloc(3*sizeof(float)*w*h*ZOOM*ZOOM);
@@ -62,15 +62,15 @@ int apply_homo_ground_truth(float *img,float *img_f,int w,int h,int w_f,int h_f,
 		//p[0] = (p[0] - 0.5) * ZOOM * w / (ZOOM * w - 1.0);
 		//p[1] = (p[1] - 0.5) * ZOOM * h / (ZOOM * h - 1.0);
 			int idx = 3*(ZOOM * w_f * j + i)+l;
-			img_aux2[idx] = EVAL(img_aux, ZOOM*w, ZOOM*h, 3, p[0], p[1]+2*ZOOM, l, OUT);//POURQUOI ?
+			img_aux2[idx] = EVAL(img_aux, ZOOM*w, ZOOM*h, 3, p[0], p[1], l, OUT);//POURQUOI ?
 	}
 	
-	int taps = 2*ZOOM;
+	int taps = 3*ZOOM;
 	double sigma = 0.8 * ZOOM;
 	double *gauss = malloc(pow((2*taps+1),2)*sizeof(float));
 	double tot = 0;
 	for(int i=-taps;i<=taps;i++){
-		for(int j=-taps;i<=taps;i++){
+		for(int j=-taps;j<=taps;j++){
 			tot += (gauss[i+taps+(j+taps)*(2*taps+1)] = exp(-(pow(i,2)+pow(j,2))/(2*pow(sigma,2))));
 		}
 	}	

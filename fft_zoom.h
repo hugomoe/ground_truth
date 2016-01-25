@@ -51,7 +51,7 @@ for(int l=0;l<pd;l++){
 	
 
 	for(int i=0;i<kw;i++){
-		for(int j=0;j<kw;j++){
+		for(int j=0;j<kh;j++){
 			img_final[(i+j*kw)*pd+l]= (kw/(float)w)*(kh/(float)h)*img_final_aux[i+j*kw];
 		}
 	}
@@ -148,8 +148,6 @@ void fourierBackward(float* reIn,
       for(i=0;i<largeur;i++)
       {
           /*on décentre*/
-	      x=i;
-	      y=j;
 	      x=good_modulus(i+largeur/2,largeur);
 	      y=good_modulus(j+hauteur/2,hauteur);
 
